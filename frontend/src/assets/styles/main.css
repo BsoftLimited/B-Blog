@@ -1,0 +1,28 @@
+.headline{
+    font-weight:600; font-size:1.4em;
+}
+
+.latest{
+    font-weight:600;font-size:1.5em;
+}
+
+.latest-title{
+    font-weight:600;font-size:0.8em;
+}
+
+.latest-icon-label{
+    font-size: 12px;
+}
+
+.headline-card-title{
+    font-weight:500;font-size:0.8em;
+}
+
+.headline-card-caption{
+    font-size:10px;
+}
+
+.card-select{
+	background-color: rgba(108, 99, 255, 0.4);
+	color: white !important;
+}
