@@ -3,7 +3,7 @@ import { Response } from "express";
 
 export default function uuid() {
     var h='0123456789abcdef';
-    var k='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+    var k='xxxxxxxx_xxxx_4xxx_yxxx_xxxxxxxxxxxx';
     /* same as e4() below */
 
     var u='',i=0,rb=Math.random()*0xffffffff|0;

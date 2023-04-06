@@ -3,7 +3,7 @@ import mysql from "mysql2";
 import Database from "../config/database";
 import ErrorHandler from "../config/error";
 import Session from "../config/session";
-import { report } from "../utils";
+import uuid, { report } from "../utils";
 
 export class Interest {
     db: Database;
@@ -14,6 +14,7 @@ export class Interest {
         this.db = db;
         this.error = error;
         this.ownerID = ownerID;
+
     }
     
     async check(): Promise<boolean>{
@@ -47,22 +48,23 @@ export class Interest {
         return interests;
     }
 
-    async write(response: Response, interest: string): Promise<Response<any, Record<string, any>> | undefined>{
+    async write(interest: string): Promise<boolean>{
         try{
             if(await this.check()){
                 if(await this.check_interests(interest)){
-                    return response.status(500).send({ messeage: "interest already exist"});
+                    return true;
                 }else{
-                    const init = await this.db.process(`INSERT INTO ${this.ownerID}_interests SET interest = ?`, [interest], "interest addition failed");
+                    let id = uuid();
+                    const init = await this.db.process(`INSERT INTO ${this.ownerID}_interests SET id = ?, name = ?`, [id, interest.toLocaleLowerCase()], "interest addition failed");
                     if(init){
-                        return response.status(201).send({ messeage: "succeeded"});
+                        return true;
                     }
                 }
             }
         }catch(error){
             this.error.add(500, JSON.stringify(error), "unknown server error");
         }
-        return undefined;
+        return false;
     }
 
     async delete(response: Response, id: string): Promise<Response<any, Record<string, any>> | undefined>{
@@ -101,14 +103,13 @@ export class Interest {
 export const interestRouter = express.Router();
 
 interestRouter.get("/", (req, res) =>{
-    if(req.headers.cookie){
+    if(req.cookies.blog){
         const errorHandler = new ErrorHandler();
         const database = new Database(errorHandler);
-        const session = new Session(database, errorHandler);
 
-        session.get(req.body.id).then(userID =>{
-            if(userID){
-                new Interest(database, errorHandler, req.body.id).all(res).then((init) =>{
+        new Session(database, errorHandler).get(req.cookies.blog).then(userID =>{ 
+            if(typeof userID === 'string'){
+                new Interest(database, errorHandler, userID).all(res).then((init) =>{
                     if(init === undefined){
                         return report(res, "unknown server error", errorHandler);
                     }
@@ -126,27 +127,24 @@ interestRouter.get("/", (req, res) =>{
     }
 });
 
-interestRouter.post("/", (req, res) =>{
-    if(req.body.id){
+interestRouter.post("/",async (req, res) =>{
+    if(req.cookies.blog && req.body.interests){
         const errorHandler = new ErrorHandler();
         const database = new Database(errorHandler);
-        const session = new Session(database, errorHandler);
 
-        session.get(req.body.id).then(userID =>{
-            if(userID){
-                new Interest(database, errorHandler, req.body.id).all(res).then((init) =>{
-                    if(init === undefined){
-                        return report(res, "unknown server error", errorHandler);
-                    }
-                    return init;
-                }).catch(error =>{ 
-                    errorHandler.add(500, JSON.stringify(error), "unknown server error");
+        const userID = await new Session(database, errorHandler).get(req.cookies.blog);
+        if(typeof userID === 'string'){
+            for(let i = 0; i < req.body.interests.length; i++){
+                const interest: string = req.body.interests[i];
+                const init = await new Interest(database, errorHandler, userID).write(interest);
+                if(!init){
                     return report(res, "unknown server error", errorHandler);
-                });
-            }else{
-                return report(res, "session expired or not found", errorHandler);
+                }
             }
-        });
+            return res.status(201).send({ messeage: "succeeded"});
+        }else{
+            return report(res, "session expired or not found", errorHandler);
+        }
     }else{
         return res.status(500).send({message: "invalid request to server"});
     }
