@@ -21,3 +21,8 @@ export const report = (res: Response, fallback: string, errorHandler: ErrorHandl
         return res.status(500).send({message: fallback});
     }
 }
+
+export const toSlurg = (name: string) =>{
+    let init = name.toLocaleLowerCase();
+    return init.replace(" ", "_");
+}

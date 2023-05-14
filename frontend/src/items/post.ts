@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { Json } from "../utils/util";
+import { User } from "./user";
 
 export interface Comment{
     id:string, userID:string, message: string, time: Date
@@ -7,11 +8,10 @@ export interface Comment{
 
 export interface Post{
     id: string, 
-    userID: string,
-    category: string, 
+    user: User,
+    categories: string[], 
     title: string,
     message: string,
-    image?: string,
     time: string,
     views: number,
     likes: string[],
@@ -19,35 +19,21 @@ export interface Post{
     comments: Comment[]
 }
 
-function init(): Map<string, Post[]>{
-    let initOne: Post = { 
-        id: "sdfg", userID: "sdfgh", title: "Java Programming", category: "Software", message: "java is a language of the gods", 
-        time: new Date().toString(), views: 12, comments:[], likes:[], dislikes:[] };
-    let initTwo: Post = { 
-            id: "sdfg", userID: "sdfgh", title: "Java Programming", category: "Software", message: "java is a language of the gods", 
-            time: new Date().toString(), views: 12, comments:[], likes:[], dislikes:[] };
-    let initThree: Post = { 
-        id: "sdfg", userID: "sdfgh", title: "Java Programming", category: "Software", message: "java is a language of the gods", 
-        time: new Date().toString(), views: 12, comments:[], likes:[], dislikes:[] };
-    let initFour: Post = { 
-        id: "sdfg", userID: "sdfgh", title: "Java Programming", category: "Software", message: "java is a language of the gods", 
-        time: new Date().toString(), views: 12, comments:[], likes:[], dislikes:[] };
-    let initFive: Post = { 
-        id: "sdfg", userID: "sdfgh", title: "Java Programming", category: "Software", message: "java is a language of the gods", 
-        time: new Date().toString(), views: 12, comments:[], likes:[], dislikes:[] };
-    let initSix: Post = { 
-        id: "sdfg", userID: "sdfgh", title: "Java Programming", category: "Software", message: "java is a language of the gods", 
-        time: new Date().toString(), views: 12, comments:[], likes:[], dislikes:[] };
-    let initSeven: Post = { 
-        id: "sdfg", userID: "sdfgh", title: "Java Programming", category: "Software", message: "java is a language of the gods", 
-        time: new Date().toString(), views: 12, comments:[], likes:[], dislikes:[] };
+export interface PostPeview{
+    id: string, 
+    user: User,
+    categories: string[], 
+    title: string,
+    message: string,
+    time: string,
+    views: number,
+    likes: number,
+    dislikes: number,
+    comments: number
+}
 
-    let map: Map<string, Post[]> = new Map();
-
-    map.set("Latest", [initOne, initTwo, initThree, initFour, initFive, initSix, initSeven]);
-    map.set(initOne.category, [initOne, initTwo, initThree, initFour, initFive, initSix, initSeven]);
-    
-    return map;
+export interface Category{
+    name: string
 }
 
 const initialState: string = Json.stringify(init());

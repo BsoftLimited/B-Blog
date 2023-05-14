@@ -4,6 +4,7 @@ import express from "express";
 import { userRouter } from "./items/user";
 import cors from 'cors';
 import { interestRouter } from "./items/interests";
+import { postsRouter } from "./items/posts";
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use(cors({credentials: true }));
 
 app.use("/user", userRouter);
 app.use("/interests", interestRouter);
+app.use("/posts", postsRouter);
 
 app.get("/", async(req, res) => {
     return res.status(200).send({message: "welcome to b-blog api"});

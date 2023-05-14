@@ -40,3 +40,7 @@ export class Character{
         return [' ', '\n', '\t'].includes(char);
     }
 }
+
+export default class Util{
+    public static HomeUrl = "http://localhost:8000/";
+}

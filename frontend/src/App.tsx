@@ -1,6 +1,6 @@
 import 'bootstrap/dist/css/bootstrap.css';
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import Home from './screens/home';
 import Login from './screens/login';
 import Error from './screens/error';
@@ -57,7 +57,7 @@ import { Posts } from './components/posts';
 
 const App = () => {
     return (
-        <BrowserRouter>
+        <HashRouter>
             <Routes>
                 <Route index element={(<Home /> )} />
                 <Route path="/home" element={(<Home /> )} />
@@ -71,7 +71,7 @@ const App = () => {
 
                 <Route path="*" element={(<Error /> )} />
             </Routes>
-        </BrowserRouter>);
+        </HashRouter>);
 }
 
 export default App;

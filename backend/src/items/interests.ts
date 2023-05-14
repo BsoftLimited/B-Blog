@@ -4,29 +4,19 @@ import Database from "../config/database";
 import ErrorHandler from "../config/error";
 import Session from "../config/session";
 import uuid, { report } from "../utils";
+import { Categories, CategoryDetails } from "./posts";
 
 export class Interest {
     db: Database;
     error: ErrorHandler;
-    ownerID: string;
 
-    constructor(db: Database, error: ErrorHandler, ownerID: string){
+    constructor(db: Database, error: ErrorHandler){
         this.db = db;
         this.error = error;
-        this.ownerID = ownerID;
-
     }
     
-    async check(): Promise<boolean>{
-        const init = await this.db.checkTable(`${this.ownerID}_interests`);
-        if(init === 0){
-            return this.db.createTable(`CREATE TABLE ${this.ownerID}_interests (id CHAR(50) NOT NULL PRIMARY KEY, name CHAR(50) NOT NULL)`);
-        }
-        return init == 1;
-    }
-    
-    async check_interests(name: string): Promise<boolean | undefined>{
-        const init = await this.db.process(`SELECT * FROM ${this.ownerID}_interests WHERE name = ?`, [name], "interest checking error");
+    async check(userID: string, categoryID: string): Promise<boolean | undefined>{
+        const init = await this.db.process(`SELECT * FROM Interests WHERE userID = ? categoryID = ?`, [userID, categoryID], "interest checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return rows.length > 0;
@@ -34,69 +24,83 @@ export class Interest {
         return undefined;
     }
 
-    async getAll(): Promise<{id: string, name: string }[]>{
-        let interests: { id: string, name: string }[] = [];
-        if(await this.check()){
-            const init = await this.db.process(`SELECT * FROM ${this.ownerID}_interests`, [], "interest checking error");
-            if(init){
-                const rows = init as mysql.RowDataPacket[];
-                rows.forEach(row => {
-                    interests.push({ id: row.id, name: row.name});
-                });
-            }
-        }
-        return interests;
-    }
+    async all(userID: string): Promise<CategoryDetails[] |undefined>{
+        const init = await this.db.process(`SELECT * FROM Interests WHERE userID = ?`, [userID], "interest checking error");
+        if(init){
+            const rows = init as mysql.RowDataPacket[];
 
-    async write(interest: string): Promise<boolean>{
-        try{
-            if(await this.check()){
-                if(await this.check_interests(interest)){
-                    return true;
+            let categories = new Categories(this.db, this.error);
+            let interests: CategoryDetails[] = [];
+            for(let i = 0; i < rows.length; i++){
+                const row = rows[i];
+                let interest = await categories.get(row.categoryID);
+                if(interest){
+                    interests.push(interest);
                 }else{
-                    let id = uuid();
-                    const init = await this.db.process(`INSERT INTO ${this.ownerID}_interests SET id = ?, name = ?`, [id, interest.toLocaleLowerCase()], "interest addition failed");
-                    if(init){
-                        return true;
-                    }
+                    return undefined;
                 }
             }
-        }catch(error){
-            this.error.add(500, JSON.stringify(error), "unknown server error");
-        }
-        return false;
-    }
-
-    async delete(response: Response, id: string): Promise<Response<any, Record<string, any>> | undefined>{
-        try{
-            if(await this.check()){
-                if(await this.check_interests(id)){
-                    const init = await this.db.process(`DELETE FROM ${this.ownerID}_interests WHERE id = ?`, [id], "interests delete failed");
-                    if(init){
-                        return response.status(200).send({ messeage: "succeeded", userID: id });
-                    }else{
-                        return response.status(500).send({ message: "interests server error" });
-                    }
-                }else{
-                    return response.status(500).send({ message: "interests does not exists" });
-                }
-            }
-        }catch(error){
-            this.error.add(500, JSON.stringify(error), "unknown server error");
+            return interests;
         }
         return undefined;
     }
 
-    async all(response: Response): Promise<Response<any, Record<string, any>> | undefined>{
-        try{
-            if(await this.check()){
-                const init = await this.getAll();
+    async add(userID: string, categoryID: string): Promise<boolean | undefined>{
+        if(await this.check(userID, categoryID)){
+            return true;
+        }else{
+            const init = await this.db.process(`INSERT INTO Interests SET userID = ?, categoryID = ?`, [userID, categoryID], "interest addition failed");
+            if(init){
+                return true;
+            }
+        }
+        return undefined;
+    }
+
+    async write(response: Response, sessionID: string, interests: string[]): Promise<Response<any, Record<string, any>>>{
+        let userID = await new Session(this.db, this.error).get(sessionID);
+        if(userID){
+            let categories = new Categories(this.db, this.error);
+            for(let i = 0; i < interests.length; i++){
+                let interest = interests[i];
+                const categoryID = await categories.add(interest);
+                if(typeof categoryID === "number"){
+                    if(await this.add(userID, categoryID.toString()) === undefined){
+                        return this.error.display(response);
+                    }
+                }else{
+                    return this.error.display(response);
+                }
+            }
+            return response.status(200).send({ messeage: "succeeded" });
+        }
+        return this.error.display(response);
+    }
+
+    async delete(response: Response, id: string, categoryID: string): Promise<Response<any, Record<string, any>>>{
+        let userID = await new Session(this.db, this.error).get(id);
+        if(userID){
+            if(await this.check(userID, categoryID)){
+                const init = await this.db.process(`DELETE FROM Interests WHERE userID = ? AND categoryID`, [userID, categoryID], "interests delete failed");
+                if(init){
+                    return response.status(200).send({ messeage: "succeeded", userID: id });
+                }
+            }else{
+                return response.status(500).send({ message: "interests does not exists" });
+            }
+        }
+        return this.error.display(response);
+    }
+
+    async getAll(response: Response, sessionID: string): Promise<Response<any, Record<string, any>>>{
+        let userID = await new Session(this.db, this.error).get(sessionID);
+        if(userID){
+            const init = await this.all(userID);
+            if(init){
                 return response.status(200).send(init);
             }
-        }catch(error){
-            this.error.add(500, JSON.stringify(error), "unknown server error");
         }
-        return undefined;
+        return this.error.display(response);
     }
 }
 
@@ -107,44 +111,22 @@ interestRouter.get("/", (req, res) =>{
         const errorHandler = new ErrorHandler();
         const database = new Database(errorHandler);
 
-        new Session(database, errorHandler).get(req.cookies.blog).then(userID =>{ 
-            if(typeof userID === 'string'){
-                new Interest(database, errorHandler, userID).all(res).then((init) =>{
-                    if(init === undefined){
-                        return report(res, "unknown server error", errorHandler);
-                    }
-                    return init;
-                }).catch(error =>{ 
-                    errorHandler.add(500, JSON.stringify(error), "unknown server error");
-                    return report(res, "unknown server error", errorHandler);
-                });
-            }else{
-                return report(res, "session expired or not found", errorHandler);
-            }
+        new Interest(database, errorHandler).getAll(res, req.cookies.blog).then((init) =>{
+            return init;
         });
     }else{
-        return res.status(500).send({message: "invalid request to server"});
+        return res.status(500).send({message: "invalid or expired session"});
     }
 });
 
-interestRouter.post("/",async (req, res) =>{
+interestRouter.post("/", (req, res) =>{
     if(req.cookies.blog && req.body.interests){
         const errorHandler = new ErrorHandler();
         const database = new Database(errorHandler);
 
-        const userID = await new Session(database, errorHandler).get(req.cookies.blog);
-        if(typeof userID === 'string'){
-            for(let i = 0; i < req.body.interests.length; i++){
-                const interest: string = req.body.interests[i];
-                const init = await new Interest(database, errorHandler, userID).write(interest);
-                if(!init){
-                    return report(res, "unknown server error", errorHandler);
-                }
-            }
-            return res.status(201).send({ messeage: "succeeded"});
-        }else{
-            return report(res, "session expired or not found", errorHandler);
-        }
+        new Interest(database, errorHandler).write(res, req.cookies.blog, req.body.interests).then((init) =>{
+            return init;
+        });
     }else{
         return res.status(500).send({message: "invalid request to server"});
     }

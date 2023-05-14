@@ -4,28 +4,24 @@ import Database from "../config/database";
 import ErrorHandler from "../config/error";
 import Session from "../config/session";
 import uuid from "../utils";
+import { User, UserDetails } from "./user";
+import { CommentLikes } from "./likes";
+
+export interface CommentDetails{
+    id:string, user: UserDetails, message:  string
+}
 
 export class Comments {
     db: Database;
     error: ErrorHandler;
-    postID: string;
 
-    constructor(postID: string, db: Database, error: ErrorHandler){
+    constructor( db: Database, error: ErrorHandler){
         this.db = db;
         this.error = error;
-        this.postID = postID;
     }
     
-    async check(): Promise<boolean>{
-        const init = await this.db.checkTable(`${this.postID}_comments`);
-        if(init === 0){
-            return this.db.createTable(`CREATE TABLE ${this.postID}_comments (id CHAR(50) NOT NULL PRIMARY KEY, userID CHAR(30) NOT NULL, message CHAR(30) NOT NULL)`);
-        }
-        return init == 1;
-    }
-    
-    async check_comment(userID: string, message: string): Promise<boolean | undefined>{
-        const init = await this.db.process(`SELECT * FROM ${this.postID}_comments WHERE userID = ? AND message = ?`, [userID, message], "comments checking error");
+    async check_comment(postID: string, userID: string, message: string): Promise<boolean | undefined>{
+        const init = await this.db.process(`SELECT * FROM Comments WHERE postID = ? AND userID = ? AND message = ?`, [postID, userID, message], "comments checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return rows.length > 0;
@@ -33,65 +29,67 @@ export class Comments {
         return undefined;
     }
 
-    async getAll(): Promise<{id: string, message: string }[]>{
-        let comments: { id: string, message: string }[] = [];
-        if(await this.check()){
-            const init = await this.db.process(`SELECT * FROM ${this.postID}_comments`, [], "comments checking error");
-            if(init){
-                const rows = init as mysql.RowDataPacket[];
-                rows.forEach(row => {
-                    comments.push({ id: row.id, message: row.message});
-                });
-            }
-        }
-        return comments;
-    }
-
-    async write(response: Response, id: string, message: string): Promise<Response<any, Record<string, any>> | undefined>{
-        try{
-            if(await this.check()){
-                const session = new Session(this.db, this.error);
-                const userID = await session.get(id);
-                const commentID = uuid();
-                if(userID && await this.check_comment(userID, message)){
-                    return response.status(500).send({ message: "user with the same email already exists"});
+    async all(postID: string): Promise<CommentDetails[] | undefined>{
+        let comments: CommentDetails[] = [];
+        const init = await this.db.process(`SELECT * FROM Comments WHERE postID = ? ORDER BY time DESC`, [postID], "comments checking error");
+        if(init){
+            const rows = init as mysql.RowDataPacket[];
+            for(let i = 0; i < rows.length; i++){
+                const row = rows[0];
+                let user  =  await new User(this.db, this.error).details(row.userID);
+                if(user){
+                    comments.push({ id: row.id, message: row.message, user: user});
                 }else{
-                    const init = await this.db.process(`INSERT INTO ${this.postID}_comments SET id = ?, userID = ?, message = ?`, [commentID, userID], "comment sent failed");
-                    if(init){
-                        return response.status(201).send({ id: commentID, message: message});
-                    }else{
-                        return response.status(500).send({ message: "session creation failed, but registrated succesfully, try login in" });
-                    }
+                    return undefined;
                 }
             }
-        }catch(error){
-            console.log(error);
-        }
-        return response.status(500).send({ message: "unknown server errror" });
-    }
-
-    async all(response: Response): Promise<Response<any, Record<string, any>> | undefined>{
-        try{
-            if(await this.check()){
-                const init = await this.getAll();
-                return response.status(200).send(init);
-            }
-        }catch(error){
-            this.error.add(500, JSON.stringify(error), "unknown server error");
+            return comments;
         }
         return undefined;
     }
 
+    async count(postID: string): Promise<number | undefined>{
+        const init = await this.db.process(`SELECT id FROM Comments WHERE postID = ? ORDER BY time DESC`, [postID], "comments checking error");
+        if(init){
+            const rows = init as mysql.RowDataPacket[];
+            return rows.length;
+        }
+        return undefined;
+    }
+
+    async write(response: Response, postID: string, id: string, message: string): Promise<Response<any, Record<string, any>>>{
+        const session = new Session(this.db, this.error);
+        const userID = await session.get(id);
+        const commentID = uuid();
+        if(userID && await this.check_comment(postID, userID, message)){
+            return response.status(500).send({ message: "comment already exists"});
+        }else if(userID){
+            const init = await this.db.process(`INSERT INTO Comments SET id = ?, postID = ?, userID = ?, message = ?`, [commentID, postID, userID], "comment sent failed");
+            const user = await new User(this.db, this.error).details(userID);
+            if(init && user){
+                return response.status(201).send({ id: commentID, message: message, user: user});
+            }
+        }
+        return this.error.display(response);
+    }
+
+    async getAll(response: Response, postID: string): Promise<Response<any, Record<string, any>>>{
+        const init = await this.all(postID);
+        if(init){
+            return response.status(200).send(init);
+        }
+        return this.error.display(response);
+    }
 }
 
 export const commentRouter = express.Router();
 
 commentRouter.post("/", (req, res) =>{
-    if(req.cookies.blog, req.body.id){
+    if(req.cookies.blog && req.body.postID && req.body.message){
         const errorHandler = new ErrorHandler();
         const database = new Database(errorHandler);
 
-        new Comments(req.body.id, database, errorHandler).all(res).then((init) =>{
+        new Comments(database, errorHandler).write(res, req.body.postID, req.cookies.blog,  req.body.message).then((init) =>{
             if(init === undefined || errorHandler.has_error()){
                 return errorHandler.display(res);
             }
@@ -102,16 +100,26 @@ commentRouter.post("/", (req, res) =>{
     }
 });
 
-commentRouter.post("/create", (req, res) =>{
-    if(req.cookies.blog && req.body.id && req.body.message){
+commentRouter.post("/like", (req, res) =>{
+    if(req.body.id && req.cookies.blog){
         const errorHandler = new ErrorHandler();
         const database = new Database(errorHandler);
 
-        new Comments(req.body.id, database, errorHandler).write(res, req.cookies.blog,  req.body.message).then((init) =>{
-            if(init === undefined || errorHandler.has_error()){
-                return errorHandler.display(res);
-            }
-            return init;
+        new CommentLikes(database, errorHandler, req.body.id).like(res, req.cookies.blog).then((res) =>{
+            return res;
+        });
+    }else{
+        return res.status(500).send({message: "invalid request to server"});
+    }
+});
+
+commentRouter.post("/dislike", (req, res) =>{
+    if(req.body.id && req.cookies.blog){
+        const errorHandler = new ErrorHandler();
+        const database = new Database(errorHandler);
+
+        new CommentLikes(database, errorHandler, req.body.id).dislike(res, req.cookies.blog).then((res) =>{
+            return res;
         });
     }else{
         return res.status(500).send({message: "invalid request to server"});

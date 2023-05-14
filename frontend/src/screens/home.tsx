@@ -2,7 +2,7 @@ import Footer from "../components/footer";
 import Header from "../components/header";
 import { Main } from "../components/main";
 
-const Home = () =>{
+/*const Home = () =>{
     return (
         <div>
             <Header top={false} />
@@ -14,6 +14,14 @@ const Home = () =>{
             </div>
             <Main />
             <Footer />
+        </div>
+    );
+}*/
+
+const Home = () =>{
+    return (
+        <div>
+            <Header top={true} />
         </div>
     );
 }
