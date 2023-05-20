@@ -1,28 +1,96 @@
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { AnyAction, createSlice, PayloadAction, ThunkAction } from "@reduxjs/toolkit";
+import { axiosInstance } from "../utils/authcontext";
+import { RootState } from "../utils/store";
+import { LoginRequest, SignUpRequest } from "../utils/requests";
 
 export interface User{
-    id: string, name: string, username: string
+    name: string, surname: string, email: string
 }
 
-export interface UserInfo{
-    active: boolean, user: User| undefined
-}
+export interface UserState { user?: User }
 
-const initialState: UserInfo = { active: false, user: undefined};
-
+const initState: UserState = {};
 export const userSlice = createSlice({
-    name: "user",
-    initialState,
+    name: "user", initialState: initState,
     reducers:{
-        login: (state: UserInfo, action: PayloadAction<{ username: string, password: string}>) =>{
-            let id = "cdfghjkl";
-            return { active: true, user: { id, name: "Okelekele", username: action.payload.username}};
+        set: (state: UserState, action: PayloadAction<User>) =>{
+            const init: UserState = {...state, user: action.payload };
+            return init;
         },
-        logout: (state: UserInfo, action: PayloadAction) =>{
-            return { active: false, user: undefined};
+
+        init: (state: UserState, action: PayloadAction<User>) =>{
+            const init: UserState = {...state, user: action.payload };
+            return init;
         },
+        
+        logout: (state: UserState,  action: PayloadAction) =>{
+            const init: UserState =  {...state, user: undefined };
+            return init;
+        }
     }
 });
 
-export const { login, logout} = userSlice.actions;
+export const signupAsync = (data: SignUpRequest, onStart: CallableFunction, onfailed: CallableFunction): ThunkAction<void, RootState, unknown,AnyAction> =>{
+    return async(dispatch) =>{
+        onStart();
+        axiosInstance.post<User>('user/', data).then((response)=>{
+            if(response.status === 200 ){
+                dispatch(set(response.data));
+            }else{
+                onfailed(response.data);
+            }
+        }).catch((error) =>{
+            onfailed(error.response.data);
+        });
+    }
+}
+
+export const loginAsync = (data: LoginRequest, onStart: CallableFunction, onFinished: CallableFunction, onfailed: CallableFunction): ThunkAction<void, RootState, unknown,AnyAction> =>{
+    return async(dispatch) =>{
+        onStart();
+        axiosInstance.post<User>('user/login', data).then((response)=>{
+            if(response.status === 200 ){
+                dispatch(set(response.data));
+                onFinished();
+            }else{
+               onfailed(response.data);
+            }
+        }).catch((error)=>{
+            onfailed(error.response.data);
+        });
+    }
+}
+
+export const logoutAsync = (onfailed: CallableFunction): ThunkAction<void, RootState, unknown,AnyAction> =>{
+    return async(dispatch) =>{
+        axiosInstance.get('user/logout').then((response)=>{
+            if(response.status === 200 ){
+                dispatch(logout());
+            }else{
+            }
+        }).catch((error)=>{
+            onfailed(error.response.data);
+        });
+    }
+}
+
+export const initAccountAsync = ( onStart?: CallableFunction, onfinished?: CallableFunction, onfailed?: CallableFunction): ThunkAction<void, RootState, unknown,AnyAction> =>{
+    return async(dispatch) =>{
+        if(onStart){ onStart(); }
+        axiosInstance.get('user').then((response)=>{
+            if(response.status === 200 ){
+                dispatch(init(response.data));
+                if(onfinished){ onfinished(); }
+            }else{
+                console.log(response.data);
+               if(onfailed){ onfailed(response.data); } 
+            }
+        }).catch((error)=>{
+        	console.log(error.response.data);
+            if(onfailed){ onfailed(error.response.data); }
+        });
+    }
+}
+
+export const { set, init, logout } = userSlice.actions;
 export default userSlice.reducer;
