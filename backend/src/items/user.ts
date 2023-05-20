@@ -1,25 +1,16 @@
 import express, { Response, Request } from "express";
 import mysql from "mysql2";
-import Database from "../config/database";
-import ErrorHandler from "../config/error";
 import Session from "../config/session";
 import uuid from "../utils";
+import db from "../config/database";
 
 export interface UserDetails{
     name: string, surname: string, email: string, 
 }
 
-export class User {
-    db: Database;
-    error: ErrorHandler;
-
-    constructor(db: Database, error: ErrorHandler){
-        this.db = db;
-        this.error = error;
-    }
-    
+export class User {    
     async check_users(email: string): Promise<boolean | undefined>{
-        const init = await this.db.process("SELECT * FROM Users WHERE email = ?", [email], "user checking error");
+        const init = await db.process("SELECT * FROM Users WHERE email = ?", [email], "user checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return rows.length > 0;
@@ -28,7 +19,7 @@ export class User {
     }
 
     async details(userID: string): Promise<UserDetails | undefined>{
-        const init = await this.db.process("SELECT * FROM Users WHERE id = ?", [userID], "user checking error");
+        const init = await db.process("SELECT * FROM Users WHERE id = ?", [userID], "user checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return  { name: rows[0].name, surname: rows[0].surname, email: rows[0].email };
@@ -41,9 +32,9 @@ export class User {
         if(await this.check_users(email)){
             return response.status(500).send({ message: "user with the same email already exists"});
         }else{
-            const init = await this.db.process("INSERT INTO Users SET id = ?, name = ?, surname = ?, email = ?, password = ?", [userID, name, surname, email, password], "user registration failed");
+            const init = await db.process("INSERT INTO Users SET id = ?, name = ?, surname = ?, email = ?, password = ?", [userID, name, surname, email, password], "user registration failed");
             if(init){
-                const session = new Session(this.db, this.error);
+                const session = new Session();
                 const id = await session.create(userID);
                 if(id){
                     response.cookie('blog', id, {
@@ -59,18 +50,18 @@ export class User {
                 }
             }
         }
-        return this.error.display(response);
+        return db.errorHandler.display(response);
     }
 
 
     async login(request: Request, response: Response, email: string, password: string): Promise<Response<any, Record<string, any>>>{
-        const init = await this.db.process("SELECT * FROM Users WHERE email = ?", [email], "email or user does not exits");
+        const init = await db.process("SELECT * FROM Users WHERE email = ?", [email], "email or user does not exits");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             if(rows && rows.length > 0){
                 const result = rows[0];
                 if(result.password === password){
-                    const session = new Session(this.db, this.error);
+                    const session = new Session();
                     const id = await session.create(result.id);
                     if(id){
                         response.cookie('blog', id, {
@@ -89,27 +80,27 @@ export class User {
                 return response.status(404).send({ messae: "account with this email address not found" });
             }
         }
-        return this.error.display(response);
+        return db.errorHandler.display(response);
     }
 
     async init(response: Response, id: string): Promise<Response<any, Record<string, any>>>{
-        const session = new Session(this.db, this.error);
+        const session = new Session();
         const userID = await session.get(id);
         if(userID){
-            const init = await this.db.process("SELECT * FROM Users WHERE id = ?", [userID], "fetching user error");
+            const init = await db.process("SELECT * FROM Users WHERE id = ?", [userID], "fetching user error");
             if(init){
                 const rows = init as mysql.RowDataPacket[];
                 if(rows){
                     if(rows.length > 0){
                         const result = rows[0];
-                        return response.status(201).send({ id: id, name: result.name, surname: result.surname, email: result.email, phone: result.phone });
+                        return response.status(200).send({ id: id, name: result.name, surname: result.surname, email: result.email, phone: result.phone });
                     }else{
                         return response.status(404).send({ messae: "account with this email address not found" });
                     }
                 }
             }
         }
-        return this.error.display(response);
+        return db.errorHandler.display(response);
     }
 }
 
@@ -117,10 +108,7 @@ export const userRouter = express.Router();
 
 userRouter.post("/", (req, res) =>{
     if(req.body.name && req.body.surname && req.body.email && req.body.password){
-        const errorHandler = new ErrorHandler();
-        const database = new Database(errorHandler);
-
-        new User(database, errorHandler).write(req, res, req.body.name, req.body.surname, req.body.email, req.body.password).then((init) =>{
+        new User().write(req, res, req.body.name, req.body.surname, req.body.email, req.body.password).then((init) =>{
             return init;
         });
     }else{
@@ -130,10 +118,7 @@ userRouter.post("/", (req, res) =>{
 
 userRouter.get("/", (req, res) =>{
     if(req.cookies.blog){
-        const errorHandler = new ErrorHandler();
-        const database = new Database(errorHandler);
-
-        new User(database, errorHandler).init(res, req.cookies.blog).then((init) =>{
+        new User().init(res, req.cookies.blog).then((init) =>{
             return init;
         });
     }else{
@@ -143,10 +128,7 @@ userRouter.get("/", (req, res) =>{
 
 userRouter.post("/login", (req, res) =>{
     if(req.body.email && req.body.password){
-        const errorHandler = new ErrorHandler();
-        const database = new Database(errorHandler);
-
-        new User(database, errorHandler).login(req, res, req.body.email, req.body.password).then((init) =>{
+        new User().login(req, res, req.body.email, req.body.password).then((init) =>{
             return init;
         });
     }else{
@@ -156,7 +138,7 @@ userRouter.post("/login", (req, res) =>{
 
 userRouter.get("/logout", (req, res) =>{
     if(req.cookies.blog){
-        res.cookie('blog', 'loggedout', {
+        res.cookie('blog', '', {
             expires: new Date(Date.now() + 10 * 300),
             httpOnly: true,
           });

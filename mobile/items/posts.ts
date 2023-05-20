@@ -1,7 +1,7 @@
-import { User } from "./user";
-import { axiosInstance } from "../utils/authcontext";
-import { CategoryPostsResponse, ErrorResponse, HomePageResponse, ViewPostResponse } from "../utils/response";
+import { axiosInstance } from "../utils/connection";
+import { CategoryPostsResponse, ErrorResponse, HomePageResponse, ViewPostResponse } from "../utils/reponse";
 import { PostCreateRequest } from "../utils/requests";
+import { User } from "./user";
 
 export interface Comment{
     id:string, userID:string, message: string, time: Date

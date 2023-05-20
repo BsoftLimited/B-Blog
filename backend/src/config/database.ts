@@ -1,7 +1,7 @@
 import mysql, { RowDataPacket } from "mysql2";
 import ErrorHandler from "./error";
 
-export default class Database {
+export class Database {
     private db: mysql.Connection;
     private error: ErrorHandler;
 
@@ -22,6 +22,12 @@ export default class Database {
         });
         this.error = error;
     }
+
+    
+    public get errorHandler() : ErrorHandler {
+        return this.errorHandler;
+    }
+    
 
     private async createTable(query: string): Promise<boolean>{
         return await new Promise<boolean>((resolve, reject) =>{
@@ -144,3 +150,7 @@ export default class Database {
         }
     }
 }
+
+const db = new Database(new ErrorHandler());
+
+export default db;

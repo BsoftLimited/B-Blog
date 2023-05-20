@@ -1,9 +1,8 @@
 import express, { Response } from "express";
 import mysql from "mysql2";
-import Database from "../config/database";
-import ErrorHandler from "../config/error";
 import Session from "../config/session";
 import { User, UserDetails} from "./user";
+import db from "../config/database";
 
 export interface ViewsDetails{
     postID: string,
@@ -12,16 +11,8 @@ export interface ViewsDetails{
 }
 
 export class Views {
-    db: Database;
-    error: ErrorHandler;
-
-    constructor(db: Database, error: ErrorHandler){
-        this.db = db;
-        this.error = error;
-    }
-
     async check_views(postID: string, userID: string): Promise<boolean | undefined>{
-        const init = await this.db.process(`SELECT * FROM Views WHERE postID = ? AND userID = ?`, [postID, userID], "views checking error");
+        const init = await db.process(`SELECT * FROM Views WHERE postID = ? AND userID = ?`, [postID, userID], "views checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return rows.length > 0;
@@ -30,13 +21,13 @@ export class Views {
     }
 
     async all(postID: string): Promise<ViewsDetails[]| undefined>{
-        const init = await this.db.process(`SELECT * FROM Views WHERE postID = ?`, [postID], "views checking error");
+        const init = await db.process(`SELECT * FROM Views WHERE postID = ?`, [postID], "views checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             let views: ViewsDetails[] = [];
             for(let i = 0; i < rows.length; i++){
                 const  row = rows[0];
-                let user = await new User(this.db, this.error).details(row.userID);
+                let user = await new User().details(row.userID);
                 if(user){
                     views.push({postID: postID, user: user, time: row.time});
                 }else{
@@ -49,7 +40,7 @@ export class Views {
     }
 
     async count(postID: string): Promise<number|undefined>{
-        const init = await this.db.process(`SELECT * FROM Views WHERE postID = ?`, [postID], "views checking error");
+        const init = await db.process(`SELECT * FROM Views WHERE postID = ?`, [postID], "views checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return rows.length;
@@ -58,7 +49,7 @@ export class Views {
     }
 
     async didI(postID: string, userID: string): Promise<boolean| undefined>{
-        const init = await this.db.process(`SELECT * FROM Views WHERE postID = ? AND userID = ?`, [postID, userID], "views checking error");
+        const init = await db.process(`SELECT * FROM Views WHERE postID = ? AND userID = ?`, [postID, userID], "views checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return rows.length > 0;
@@ -67,7 +58,7 @@ export class Views {
     }
 
     async add(postID: string, userID: string): Promise<boolean | undefined>{
-        const init = await this.db.process(`INSERT INTO Views SET postID = ? AND userID = ?`, [postID, userID], "views failed");
+        const init = await db.process(`INSERT INTO Views SET postID = ? AND userID = ?`, [postID, userID], "views failed");
         if(init){
             return true;
         }
@@ -75,7 +66,7 @@ export class Views {
     }
 
     async write(response: Response, postID: string, id: string): Promise<Response<any, Record<string, any>>>{
-        const userID = await new Session(this.db, this.error).get(id);
+        const userID = await new Session().get(id);
         if(userID){
             if(await this.check_views(postID, userID)){
                 return response.status(201).send({ messeage: "succeeded"});
@@ -86,7 +77,7 @@ export class Views {
                 }
             }
         }
-        return this.error.display(response);
+        return db.errorHandler.display(response);
     }
 
     async getAll(response: Response, postID: string): Promise<Response<any, Record<string, any>>>{
@@ -94,6 +85,6 @@ export class Views {
         if(init){
             return response.status(200).send(init);
         }
-        return  this.error.display(response);
+        return  db.errorHandler.display(response);
     }
 }

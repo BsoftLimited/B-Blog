@@ -1,22 +1,12 @@
 import express, { Response } from "express";
 import mysql from "mysql2";
-import Database from "../config/database";
-import ErrorHandler from "../config/error";
 import Session from "../config/session";
-import uuid, { report } from "../utils";
 import { Categories, CategoryDetails } from "./posts";
+import db from "../config/database";
 
 export class Interest {
-    db: Database;
-    error: ErrorHandler;
-
-    constructor(db: Database, error: ErrorHandler){
-        this.db = db;
-        this.error = error;
-    }
-    
     async check(userID: string, categoryID: string): Promise<boolean | undefined>{
-        const init = await this.db.process(`SELECT * FROM Interests WHERE userID = ? categoryID = ?`, [userID, categoryID], "interest checking error");
+        const init = await db.process(`SELECT * FROM Interests WHERE userID = ? categoryID = ?`, [userID, categoryID], "interest checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
             return rows.length > 0;
@@ -25,11 +15,11 @@ export class Interest {
     }
 
     async all(userID: string): Promise<CategoryDetails[] |undefined>{
-        const init = await this.db.process(`SELECT * FROM Interests WHERE userID = ?`, [userID], "interest checking error");
+        const init = await db.process(`SELECT * FROM Interests WHERE userID = ?`, [userID], "interest checking error");
         if(init){
             const rows = init as mysql.RowDataPacket[];
 
-            let categories = new Categories(this.db, this.error);
+            let categories = new Categories();
             let interests: CategoryDetails[] = [];
             for(let i = 0; i < rows.length; i++){
                 const row = rows[i];
@@ -49,7 +39,7 @@ export class Interest {
         if(await this.check(userID, categoryID)){
             return true;
         }else{
-            const init = await this.db.process(`INSERT INTO Interests SET userID = ?, categoryID = ?`, [userID, categoryID], "interest addition failed");
+            const init = await db.process(`INSERT INTO Interests SET userID = ?, categoryID = ?`, [userID, categoryID], "interest addition failed");
             if(init){
                 return true;
             }
@@ -58,30 +48,30 @@ export class Interest {
     }
 
     async write(response: Response, sessionID: string, interests: string[]): Promise<Response<any, Record<string, any>>>{
-        let userID = await new Session(this.db, this.error).get(sessionID);
+        let userID = await new Session().get(sessionID);
         if(userID){
-            let categories = new Categories(this.db, this.error);
+            let categories = new Categories();
             for(let i = 0; i < interests.length; i++){
                 let interest = interests[i];
                 const categoryID = await categories.add(interest);
                 if(typeof categoryID === "number"){
                     if(await this.add(userID, categoryID.toString()) === undefined){
-                        return this.error.display(response);
+                        return db.errorHandler.display(response);
                     }
                 }else{
-                    return this.error.display(response);
+                    return db.errorHandler.display(response);
                 }
             }
             return response.status(200).send({ messeage: "succeeded" });
         }
-        return this.error.display(response);
+        return db.errorHandler.display(response);
     }
 
     async delete(response: Response, id: string, categoryID: string): Promise<Response<any, Record<string, any>>>{
-        let userID = await new Session(this.db, this.error).get(id);
+        let userID = await new Session().get(id);
         if(userID){
             if(await this.check(userID, categoryID)){
-                const init = await this.db.process(`DELETE FROM Interests WHERE userID = ? AND categoryID`, [userID, categoryID], "interests delete failed");
+                const init = await db.process(`DELETE FROM Interests WHERE userID = ? AND categoryID`, [userID, categoryID], "interests delete failed");
                 if(init){
                     return response.status(200).send({ messeage: "succeeded", userID: id });
                 }
@@ -89,18 +79,18 @@ export class Interest {
                 return response.status(500).send({ message: "interests does not exists" });
             }
         }
-        return this.error.display(response);
+        return db.errorHandler.display(response);
     }
 
     async getAll(response: Response, sessionID: string): Promise<Response<any, Record<string, any>>>{
-        let userID = await new Session(this.db, this.error).get(sessionID);
+        let userID = await new Session().get(sessionID);
         if(userID){
             const init = await this.all(userID);
             if(init){
                 return response.status(200).send(init);
             }
         }
-        return this.error.display(response);
+        return db.errorHandler.display(response);
     }
 }
 
@@ -108,10 +98,7 @@ export const interestRouter = express.Router();
 
 interestRouter.get("/", (req, res) =>{
     if(req.cookies.blog){
-        const errorHandler = new ErrorHandler();
-        const database = new Database(errorHandler);
-
-        new Interest(database, errorHandler).getAll(res, req.cookies.blog).then((init) =>{
+        new Interest().getAll(res, req.cookies.blog).then((init) =>{
             return init;
         });
     }else{
@@ -121,10 +108,7 @@ interestRouter.get("/", (req, res) =>{
 
 interestRouter.post("/", (req, res) =>{
     if(req.cookies.blog && req.body.interests){
-        const errorHandler = new ErrorHandler();
-        const database = new Database(errorHandler);
-
-        new Interest(database, errorHandler).write(res, req.cookies.blog, req.body.interests).then((init) =>{
+        new Interest().write(res, req.cookies.blog, req.body.interests).then((init) =>{
             return init;
         });
     }else{

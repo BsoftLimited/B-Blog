@@ -1,3 +1,17 @@
 .footer-company-name{
     text-align:center;
 }
+
+td, td > a, .footer-company-name{
+	font-size: 13px;
+	margin-bottom: 0px;
+	padding-bottom: 0px;
+}
+
+td, th{
+	border-bottom-width: 0px;
+}
+
+table{
+	width: 100%;
+}
